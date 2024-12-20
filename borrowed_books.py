@@ -1,10 +1,13 @@
-import db  # Assuming you have a `db.py` that manages the connection
+import sqlite3
+from db import get_connection
+from datetime import datetime
 
 def manage_borrowed_books():
     while True:
-        print("\n1. Borrow Book")
-        print("2. Return Book")
-        print("3. View Borrowed Books")
+        print("\n--- Manage Borrowed Books ---")
+        print("1. Borrow a Book")
+        print("2. View Borrowed Books")
+        print("3. Return a Book")
         print("4. Go Back")
         
         choice = input("Enter your choice: ")
@@ -12,112 +15,114 @@ def manage_borrowed_books():
         if choice == "1":
             borrow_book()
         elif choice == "2":
-            return_book()
-        elif choice == "3":
             view_borrowed_books()
+        elif choice == "3":
+            return_book()
         elif choice == "4":
             break
         else:
             print("Invalid choice. Please try again.")
 
 def borrow_book():
-    book_id = input("Enter the book ID to borrow: ")
-    borrower_id = input("Enter the borrower ID: ")
-    borrow_date = input("Enter borrow date (YYYY-MM-DD): ")
-    
-    # Check if the book exists and is not already borrowed
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
+    try:
+        book_id = int(input("Enter book ID to borrow: "))
+        borrower_id = int(input("Enter borrower ID: "))
 
-    # Check if the book exists
-    cursor.execute("SELECT id FROM books WHERE id = %s", (book_id,))
-    book = cursor.fetchone()
-    
-    if not book:
-        print("The book does not exist.")
-        cursor.close()
+        # Check if book exists
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT id FROM books WHERE id = ?", (book_id,))
+        book = cursor.fetchone()
+        
+        if book is None:
+            print(f"No book found with ID {book_id}. Please check the ID and try again.")
+            connection.close()
+            return
+
+        cursor.execute("SELECT id FROM borrowers WHERE id = ?", (borrower_id,))
+        borrower = cursor.fetchone()
+
+        if borrower is None:
+            print(f"No borrower found with ID {borrower_id}. Please check the ID and try again.")
+            connection.close()
+            return
+
+        # Check if the book is already borrowed
+        cursor.execute("SELECT id FROM borrowed_books WHERE book_id = ? AND return_date IS NULL", (book_id,))
+        existing_borrow = cursor.fetchone()
+        
+        if existing_borrow:
+            print(f"The book with ID {book_id} is already borrowed and not yet returned.")
+            connection.close()
+            return
+
+        borrow_date = input("Enter borrow date (YYYY-MM-DD): ")
+        return_date = input("Enter return date (YYYY-MM-DD): ")
+
+        # Validate date format
+        try:
+            borrow_date = validate_date_format(borrow_date)
+            return_date = validate_date_format(return_date)
+        except ValueError as e:
+            print(e)
+            connection.close()
+            return
+        
+        # Insert the borrowed book into the database
+        cursor.execute("INSERT INTO borrowed_books (book_id, borrower_id, borrow_date, return_date) VALUES (?, ?, ?, ?)",
+                       (book_id, borrower_id, borrow_date, return_date))
+        connection.commit()
         connection.close()
-        return
+        print("Book borrowed successfully!")
+    except ValueError:
+        print("Invalid input. Please enter valid numeric IDs for book and borrower.")
+
+def view_borrowed_books():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT borrowed_books.id, books.title, borrowers.name, borrow_date, return_date "
+                   "FROM borrowed_books "
+                   "JOIN books ON borrowed_books.book_id = books.id "
+                   "JOIN borrowers ON borrowed_books.borrower_id = borrowers.id")
+    borrowed_books = cursor.fetchall()
     
-    # Check if the borrower exists
-    cursor.execute("SELECT id FROM borrowers WHERE id = %s", (borrower_id,))
-    borrower = cursor.fetchone()
-    
-    if not borrower:
-        print("The borrower does not exist.")
-        cursor.close()
-        connection.close()
-        return
-    
-    # Ensure the book is not already borrowed (assuming no return_date means it is borrowed)
-    cursor.execute("SELECT * FROM borrowed_books WHERE book_id = %s AND return_date IS NULL", (book_id,))
-    existing_borrow = cursor.fetchone()
-    
-    if existing_borrow:
-        print(f"The book is already borrowed by someone else.")
-        cursor.close()
-        connection.close()
-        return
-    
-    # Proceed with borrowing the book
-    cursor.execute("INSERT INTO borrowed_books (book_id, borrower_id, borrow_date) VALUES (%s, %s, %s)", (book_id, borrower_id, borrow_date))
-    connection.commit()
-    print("Book borrowed successfully.")
-    
-    cursor.close()
+    print("\n--- List of Borrowed Books ---")
+    if borrowed_books:
+        for record in borrowed_books:
+            print(f"ID: {record[0]}, Book: {record[1]}, Borrower: {record[2]}, Borrow Date: {record[3]}, Return Date: {record[4]}")
+    else:
+        print("No borrowed books found.")
     connection.close()
 
 def return_book():
-    borrowed_id = input("Enter the borrowed book ID to return: ")
-    return_date = input("Enter return date (YYYY-MM-DD): ")
-    
-    # Ensure the borrowed book exists and has not already been returned
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
-    cursor.execute("SELECT * FROM borrowed_books WHERE id = %s AND return_date IS NULL", (borrowed_id,))
-    borrowed_book = cursor.fetchone()
+    try:
+        borrowed_book_id = int(input("Enter borrowed book ID to return: "))
+        
+        # Check if borrowed book exists
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT id FROM borrowed_books WHERE id = ?", (borrowed_book_id,))
+        borrowed_book = cursor.fetchone()
 
-    if not borrowed_book:
-        print("This book has either not been borrowed or already returned.")
-        cursor.close()
+        if borrowed_book is None:
+            print(f"No borrowed book found with ID {borrowed_book_id}. Please check the ID and try again.")
+            connection.close()
+            return
+
+        # Mark the book as returned by updating the return_date
+        return_date = datetime.today().date()  # Set today's date as the return date
+        cursor.execute("UPDATE borrowed_books SET return_date = ? WHERE id = ?", (return_date, borrowed_book_id))
+        connection.commit()
         connection.close()
-        return
-    
-    # Ensure return date is not earlier than borrow date
-    if return_date < borrowed_book[3]:
-        print("Return date cannot be earlier than borrow date.")
-        cursor.close()
-        connection.close()
-        return
-    
-    # Update return date
-    cursor.execute("UPDATE borrowed_books SET return_date = %s WHERE id = %s", (return_date, borrowed_id))
-    connection.commit()
-    print("Book returned successfully.")
-    
-    cursor.close()
-    connection.close()
+        print("Book returned successfully!")
+    except ValueError:
+        print("Invalid input. Please enter a valid numeric borrowed book ID.")
 
-def view_borrowed_books():
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
-
-    # Fetch all borrowed books along with book title and borrower name
-    cursor.execute("""
-        SELECT bb.id, b.title, br.name, bb.borrow_date, bb.return_date
-        FROM borrowed_books bb
-        JOIN books b ON bb.book_id = b.id
-        JOIN borrowers br ON bb.borrower_id = br.id
-    """)
-    borrowed_books = cursor.fetchall()
-    
-    if borrowed_books:
-        print("\nList of Borrowed Books:")
-        print(f"{'ID':<5} {'Book Title':<30} {'Borrower Name':<25} {'Borrow Date':<15} {'Return Date':<15}")
-        for borrowed_book in borrowed_books:
-            print(f"{borrowed_book[0]:<5} {borrowed_book[1]:<30} {borrowed_book[2]:<25} {borrowed_book[3]:<15} {borrowed_book[4]:<15}")
-    else:
-        print("No books have been borrowed yet.")
-    
-    cursor.close()
-    connection.close()
+# Helper function to validate date format
+def validate_date_format(date_string):
+    """Validates the date format (YYYY-MM-DD)."""
+    try:
+        # Attempt to parse the date in the expected format
+        return datetime.strptime(date_string, "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError("Invalid date format. Please enter the date in YYYY-MM-DD format.")

@@ -1,8 +1,10 @@
-import db  # Assuming you have a `db.py` that manages the connection
+import sqlite3
+from db import get_connection
 
 def manage_books():
     while True:
-        print("\n1. Add Book")
+        print("\n--- Manage Books ---")
+        print("1. Add Book")
         print("2. View Books")
         print("3. Update Book")
         print("4. Delete Book")
@@ -25,45 +27,99 @@ def manage_books():
 
 def add_book():
     title = input("Enter book title: ")
-    author_id = input("Enter author ID: ")
     
-    connection = db.get_connection()  # Using db.py for connection handling
+    # Ensure the author ID is valid
+    try:
+        author_id = int(input("Enter author ID: "))
+    except ValueError:
+        print("Invalid input. Please enter a valid numeric author ID.")
+        return
+    
+    # Check if author exists
+    connection = get_connection()
     cursor = connection.cursor()
-    cursor.execute("INSERT INTO books (title, author_id) VALUES (%s, %s)", (title, author_id))
-    connection.commit()
-    print("Book added successfully.")
-    cursor.close()
-    connection.close()
+    try:
+        cursor.execute("SELECT id FROM authors WHERE id = ?", (author_id,))
+        author = cursor.fetchone()
+
+        if author is None:
+            print(f"No author found with ID {author_id}. Please add the author first.")
+            return
+
+        cursor.execute("INSERT INTO books (title, author_id) VALUES (?, ?)", (title, author_id))
+        connection.commit()
+        print("Book added successfully!")
+
+    except sqlite3.Error as e:
+        print(f"Error adding book: {e}")
+    finally:
+        connection.close()
 
 def view_books():
-    connection = db.get_connection()  # Using db.py for connection handling
+    connection = get_connection()
     cursor = connection.cursor()
-    cursor.execute("SELECT * FROM books")
+    cursor.execute("SELECT books.id, books.title, authors.name FROM books JOIN authors ON books.author_id = authors.id")
     books = cursor.fetchall()
-    for book in books:
-        print(f"ID: {book[0]}, Title: {book[1]}, Author ID: {book[2]}")
-    cursor.close()
+    
+    print("\n--- List of Books ---")
+    if books:
+        for book in books:
+            print(f"ID: {book[0]}, Title: {book[1]}, Author: {book[2]}")
+    else:
+        print("No books found.")
+    
     connection.close()
 
 def update_book():
-    book_id = input("Enter the book ID to update: ")
-    new_title = input("Enter new book title: ")
-    
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
-    cursor.execute("UPDATE books SET title = %s WHERE id = %s", (new_title, book_id))
-    connection.commit()
-    print("Book updated successfully.")
-    cursor.close()
-    connection.close()
+    try:
+        book_id = int(input("Enter book ID to update: "))
+        
+        # Check if the book exists
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT id FROM books WHERE id = ?", (book_id,))
+        book = cursor.fetchone()
+
+        if book is None:
+            print(f"No book found with ID {book_id}. Please check the ID and try again.")
+            return
+
+        # Proceed with updating the book title
+        new_title = input("Enter new title: ")
+
+        cursor.execute("UPDATE books SET title = ? WHERE id = ?", (new_title, book_id))
+        connection.commit()
+        print("Book updated successfully!")
+
+    except ValueError:
+        print("Invalid input. Please enter a valid numeric book ID.")
+    except sqlite3.Error as e:
+        print(f"Error updating book: {e}")
+    finally:
+        connection.close()
 
 def delete_book():
-    book_id = input("Enter the book ID to delete: ")
-    
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
-    cursor.execute("DELETE FROM books WHERE id = %s", (book_id,))
-    connection.commit()
-    print("Book deleted successfully.")
-    cursor.close()
-    connection.close()
+    try:
+        book_id = int(input("Enter book ID to delete: "))
+
+        # Check if the book exists
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT id FROM books WHERE id = ?", (book_id,))
+        book = cursor.fetchone()
+
+        if book is None:
+            print(f"No book found with ID {book_id}. Please check the ID and try again.")
+            return
+
+        # Delete the book
+        cursor.execute("DELETE FROM books WHERE id = ?", (book_id,))
+        connection.commit()
+        print("Book deleted successfully!")
+
+    except ValueError:
+        print("Invalid input. Please enter a valid num3eric book ID.")
+    except sqlite3.Error as e:
+        print(f"Error deleting book: {e}")
+    finally:
+        connection.close()

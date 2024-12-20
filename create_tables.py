@@ -1,67 +1,60 @@
-import mysql.connector
-from mysql.connector import Error
+import sqlite3
 
 def create_tables():
-    """Create tables for the library management system."""
+    """Create tables for the library management system using SQLite."""
     connection = None  # Initialize connection variable outside the try block
     cursor = None  # Initialize cursor variable outside the try block
     
     try:
-        # Establish the connection without using a password
-        connection = mysql.connector.connect(
-            host='localhost',
-            database='LibraryManagementSystem',  # Specify the database here
-            user='root'  # No password needed as MySQL is configured to skip authentication
-        )
+        # Establish the connection to SQLite database
+        connection = sqlite3.connect('library_management_system.db')  # SQLite database file
+        cursor = connection.cursor()
+        print("Successfully connected to the SQLite database.")
 
-        if connection.is_connected():
-            cursor = connection.cursor()
-            print("Successfully connected to the database.")
+        # Create authors table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS authors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL
+            );
+        """)
+        print("Authors table created.")
 
-            # Create authors table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS authors (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    name VARCHAR(100) NOT NULL
-                );
-            """)
-            print("Authors table created.")
+        # Create books table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS books (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                author_id INTEGER,
+                FOREIGN KEY (author_id) REFERENCES authors(id)
+            );
+        """)
+        print("Books table created.")
 
-            # Create books table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS books (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    author_id INT,
-                    FOREIGN KEY (author_id) REFERENCES authors(id)
-                );
-            """)
-            print("Books table created.")
+        # Create borrowers table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS borrowers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL
+            );
+        """)
+        print("Borrowers table created.")
 
-            # Create borrowers table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS borrowers (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    name VARCHAR(100) NOT NULL
-                );
-            """)
-            print("Borrowers table created.")
-
-            # Create borrowed_books table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS borrowed_books (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    book_id INT,
-                    borrower_id INT,
-                    borrow_date DATE,
-                    return_date DATE,
-                    FOREIGN KEY (book_id) REFERENCES books(id),
-                    FOREIGN KEY (borrower_id) REFERENCES borrowers(id)
-                );
-            """)
-            print("Borrowed Books table created.")
+        # Create borrowed_books table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS borrowed_books (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                book_id INTEGER,
+                borrower_id INTEGER,
+                borrow_date TEXT,
+                return_date TEXT,
+                FOREIGN KEY (book_id) REFERENCES books(id),
+                FOREIGN KEY (borrower_id) REFERENCES borrowers(id)
+            );
+        """)
+        print("Borrowed Books table created.")
     
-    except Error as e:
+    except sqlite3.Error as e:
         print(f"Error: {e}")
     
     finally:
@@ -69,7 +62,7 @@ def create_tables():
         if cursor:
             cursor.close()
             print("Cursor closed.")
-        if connection and connection.is_connected():
+        if connection:
             connection.close()
             print("Connection closed.")
 

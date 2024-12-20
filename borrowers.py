@@ -1,8 +1,10 @@
-import db  # Assuming you have a `db.py` that manages the connection
+import sqlite3
+from db import get_connection
 
 def manage_borrowers():
     while True:
-        print("\n1. Add Borrower")
+        print("\n--- Manage Borrowers ---")
+        print("1. Add Borrower")
         print("2. View Borrowers")
         print("3. Update Borrower")
         print("4. Delete Borrower")
@@ -24,81 +26,106 @@ def manage_borrowers():
             print("Invalid choice. Please try again.")
 
 def add_borrower():
-    name = input("Enter borrower name: ")
-    email = input("Enter borrower email: ")
-    phone = input("Enter borrower phone number: ")
+    name = input("Enter borrower name: ").strip()
     
-    connection = db.get_connection()  # Using db.py for connection handling
+    if not name:
+        print("Borrower name cannot be empty.")
+        return
+    
+    connection = get_connection()
     cursor = connection.cursor()
-    
-    # Insert data into the borrowers table (assuming it has name, email, and phone fields)
-    cursor.execute("INSERT INTO borrowers (name, email, phone) VALUES (%s, %s, %s)", (name, email, phone))
-    connection.commit()
-    print("Borrower added successfully.")
-    cursor.close()
-    connection.close()
+    try:
+        cursor.execute("INSERT INTO borrowers (name) VALUES (?)", (name,))
+        connection.commit()
+        print("Borrower added successfully!")
+    except sqlite3.Error as e:
+        print(f"Error adding borrower: {e}")
+    finally:
+        connection.close()
 
 def view_borrowers():
-    connection = db.get_connection()  # Using db.py for connection handling
+    connection = get_connection()
     cursor = connection.cursor()
-    
-    # Fetch all borrowers from the borrowers table
     cursor.execute("SELECT * FROM borrowers")
     borrowers = cursor.fetchall()
     
+    print("\n--- List of Borrowers ---")
     if borrowers:
-        print("\nList of Borrowers:")
-        print(f"{'ID':<5} {'Name':<25} {'Email':<30} {'Phone':<15}")
         for borrower in borrowers:
-            print(f"{borrower[0]:<5} {borrower[1]:<25} {borrower[2]:<30} {borrower[3]:<15}")
+            print(f"ID: {borrower[0]}, Name: {borrower[1]}")
     else:
         print("No borrowers found.")
     
-    cursor.close()
     connection.close()
 
 def update_borrower():
-    borrower_id = input("Enter the borrower ID to update: ")
-    new_name = input("Enter new borrower name: ")
-    new_email = input("Enter new borrower email: ")
-    new_phone = input("Enter new borrower phone number: ")
-    
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
-    
-    # Check if borrower exists
-    cursor.execute("SELECT * FROM borrowers WHERE id = %s", (borrower_id,))
-    borrower = cursor.fetchone()
-    
-    if borrower:
-        # Update the borrower details
-        cursor.execute("UPDATE borrowers SET name = %s, email = %s, phone = %s WHERE id = %s", 
-                       (new_name, new_email, new_phone, borrower_id))
+    try:
+        borrower_id = int(input("Enter borrower ID to update: "))
+        new_name = input("Enter new borrower name: ").strip()
+
+        if not new_name:
+            print("Borrower name cannot be empty.")
+            return
+        
+        connection = get_connection()
+        cursor = connection.cursor()
+        
+        # Check if borrower exists
+        cursor.execute("SELECT id, name FROM borrowers WHERE id = ?", (borrower_id,))
+        borrower = cursor.fetchone()
+
+        if borrower is None:
+            print(f"No borrower found with ID {borrower_id}. Please check the ID and try again.")
+            connection.close()
+            return
+        
+        # Check if the new name is different from the old one
+        if new_name == borrower[1]:
+            print("New name is the same as the current name. No update necessary.")
+            connection.close()
+            return
+
+        cursor.execute("UPDATE borrowers SET name = ? WHERE id = ?", (new_name, borrower_id))
         connection.commit()
-        print("Borrower updated successfully.")
-    else:
-        print(f"No borrower found with ID {borrower_id}.")
-    
-    cursor.close()
-    connection.close()
+        print("Borrower updated successfully!")
+    except ValueError:
+        print("Invalid input. Please enter a valid numeric borrower ID.")
+    except sqlite3.Error as e:
+        print(f"Error updating borrower: {e}")
+    finally:
+        connection.close()
 
 def delete_borrower():
-    borrower_id = input("Enter the borrower ID to delete: ")
-    
-    connection = db.get_connection()  # Using db.py for connection handling
-    cursor = connection.cursor()
-    
-    # Check if borrower exists
-    cursor.execute("SELECT * FROM borrowers WHERE id = %s", (borrower_id,))
-    borrower = cursor.fetchone()
-    
-    if borrower:
-        # Delete the borrower
-        cursor.execute("DELETE FROM borrowers WHERE id = %s", (borrower_id,))
+    try:
+        borrower_id = int(input("Enter borrower ID to delete: "))
+        
+        connection = get_connection()
+        cursor = connection.cursor()
+        
+        # Check if the borrower exists
+        cursor.execute("SELECT id FROM borrowers WHERE id = ?", (borrower_id,))
+        borrower = cursor.fetchone()
+
+        if borrower is None:
+            print(f"No borrower found with ID {borrower_id}. Please check the ID and try again.")
+            connection.close()
+            return
+        
+        # Check if the borrower has any borrowed books
+        cursor.execute("SELECT id FROM borrowed_books WHERE borrower_id = ?", (borrower_id,))
+        borrowed_books = cursor.fetchall()
+
+        if borrowed_books:
+            print(f"Cannot delete borrower with ID {borrower_id} because they have borrowed books.")
+            connection.close()
+            return
+
+        cursor.execute("DELETE FROM borrowers WHERE id = ?", (borrower_id,))
         connection.commit()
-        print("Borrower deleted successfully.")
-    else:
-        print(f"No borrower found with ID {borrower_id}.")
-    
-    cursor.close()
-    connection.close()
+        print("Borrower deleted successfully!")
+    except ValueError:
+        print("Invalid input. Please enter a valid numeric borrower ID.")
+    except sqlite3.Error as e:
+        print(f"Error deleting borrower: {e}")
+    finally:
+        connection.close()
