@@ -226,5 +226,5 @@ mysql -u root -p
 
 ## Slides link -> https://docs.google.com/presentation/d/1ctgVVEEGxy13lYeBmBEneOOGD-PFYJepjYsR5xGr7_g/edit#slide=id.g2d7210c904c_0_654
 
-video link ->
+## video link ->https://app.screencastify.com/v2/manage/videos/fkgMn9Rkdn9I8OPcVwG7
 ## Coded with passion and love by Techie Kim. 😊
