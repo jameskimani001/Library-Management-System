@@ -221,4 +221,10 @@ This project is licensed under the MIT License. See the LICENSE file for details
 You can access the MySQL command line interface with:
 Copy code
 mysql -u root -p
+## links
+## github link ->https://github.com/jameskimani001/Library-Management-System
+
+## Slides link -> https://docs.google.com/presentation/d/1ctgVVEEGxy13lYeBmBEneOOGD-PFYJepjYsR5xGr7_g/edit#slide=id.g2d7210c904c_0_654
+
+video link ->
 ## Coded with passion and love by Techie Kim. 😊

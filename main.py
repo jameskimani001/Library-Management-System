@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Date, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.exc import IntegrityError
+from datetime import datetime
 
 # Define the Base class for SQLAlchemy models
 Base = declarative_base()
@@ -75,6 +76,13 @@ def get_session():
     engine = create_engine(DATABASE_URL)
     Session = sessionmaker(bind=engine)
     return Session()
+
+# Function to validate date format
+def validate_date(date_string):
+    try:
+        return datetime.strptime(date_string, "%Y-%m-%d")
+    except ValueError:
+        return None
 
 # Function to add a book to the database
 def add_book(title, author_id):
@@ -221,15 +229,41 @@ def delete_borrower(borrower_id):
         print(f"No borrower found with ID {borrower_id}.")
     session.close()
 
-# Function to borrow a book
+# Function to borrow a book with date validation and duplicate check
 def borrow_book(book_id, borrower_id, borrow_date, return_date):
     """Adds a borrowed book record to the database."""
     session = get_session()
+    
+    # Validate date format
+    borrow_date = validate_date(borrow_date)
+    return_date = validate_date(return_date)
+    
+    if not borrow_date or not return_date:
+        print("Invalid date format. Please use YYYY-MM-DD.")
+        session.close()
+        return
+    
+    if return_date <= borrow_date:
+        print("Return date cannot be earlier than or equal to borrow date.")
+        session.close()
+        return
+    
+    # Check if the book is already borrowed (pending return)
+    existing_borrow = session.query(BorrowedBook).filter(BorrowedBook.book_id == book_id, BorrowedBook.return_date == None).first()
+    if existing_borrow:
+        print(f"The book with ID {book_id} is already borrowed and not yet returned.")
+        session.close()
+        return
+    
     new_borrowed_book = BorrowedBook(book_id=book_id, borrower_id=borrower_id, borrow_date=borrow_date, return_date=return_date)
-    session.add(new_borrowed_book)
-    session.commit()
-    print("Book borrowed successfully.")
-    session.close()
+    try:
+        session.add(new_borrowed_book)
+        session.commit()
+        print("Book borrowed successfully.")
+    except IntegrityError as e:
+        print(f"Error: {e}")
+    finally:
+        session.close()
 
 # Function to view borrowed books
 def view_borrowed_books():
@@ -241,7 +275,74 @@ def view_borrowed_books():
         print(f"ID: {borrowed_book.id}, Book ID: {borrowed_book.book_id}, Borrower ID: {borrowed_book.borrower_id}, Borrow Date: {borrowed_book.borrow_date}, Return Date: {borrowed_book.return_date}")
     session.close()
 
-# Main function
+# Function to update borrowed book return date
+def update_borrowed_book(borrowed_book_id, new_return_date):
+    """Updates the return date for a borrowed book."""
+    session = get_session()
+    
+    # Validate the new return date
+    new_return_date = validate_date(new_return_date)
+    if not new_return_date:
+        print("Invalid date format. Please use YYYY-MM-DD.")
+        session.close()
+        return
+    
+    borrowed_book = session.query(BorrowedBook).filter(BorrowedBook.id == borrowed_book_id).first()
+    if borrowed_book:
+        borrowed_book.return_date = new_return_date
+        session.commit()
+        print("Borrowed book return date updated successfully.")
+    else:
+        print(f"No borrowed book found with ID {borrowed_book_id}.")
+    session.close()
+
+# Function to delete a borrowed book entry
+def delete_borrowed_book(borrowed_book_id):
+    """Deletes a borrowed book from the database."""
+    session = get_session()
+    borrowed_book = session.query(BorrowedBook).filter(BorrowedBook.id == borrowed_book_id).first()
+    if borrowed_book:
+        session.delete(borrowed_book)
+        session.commit()
+        print("Borrowed book deleted successfully.")
+    else:
+        print(f"No borrowed book found with ID {borrowed_book_id}.")
+    session.close()
+
+# Function to manage borrowed books with CRUD options
+def manage_borrowed_books():
+    """Menu to manage borrowed books."""
+    while True:
+        print("\n--- Manage Borrowed Books ---")
+        print("1. Borrow Book")
+        print("2. View Borrowed Books")
+        print("3. Update Borrowed Book Return Date")
+        print("4. Delete Borrowed Book")
+        print("5. Go Back")
+        
+        choice = input("Enter your choice: ")
+        
+        if choice == "1":
+            book_id = int(input("Enter book ID to borrow: "))
+            borrower_id = int(input("Enter borrower ID: "))
+            borrow_date = input("Enter borrow date (YYYY-MM-DD): ")
+            return_date = input("Enter return date (YYYY-MM-DD): ")
+            borrow_book(book_id, borrower_id, borrow_date, return_date)
+        elif choice == "2":
+            view_borrowed_books()
+        elif choice == "3":
+            borrowed_book_id = int(input("Enter borrowed book ID to update: "))
+            new_return_date = input("Enter new return date (YYYY-MM-DD): ")
+            update_borrowed_book(borrowed_book_id, new_return_date)
+        elif choice == "4":
+            borrowed_book_id = int(input("Enter borrowed book ID to delete: "))
+            delete_borrowed_book(borrowed_book_id)
+        elif choice == "5":
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+# Main function with options for managing books, authors, borrowers, and borrowed books
 def main():
     """Main menu for interacting with the library system."""
     while True:
@@ -249,7 +350,7 @@ def main():
         print("1. Manage Books")
         print("2. Manage Authors")
         print("3. Manage Borrowers")
-        print("4. View Borrowed Books")
+        print("4. Manage Borrowed Books")
         print("5. Exit")
         
         choice = input("Enter your choice: ")
@@ -262,32 +363,22 @@ def main():
                 print("3. Update Book")
                 print("4. Delete Book")
                 print("5. Go Back")
-                
                 book_choice = input("Enter your choice: ")
                 
                 if book_choice == "1":
                     title = input("Enter book title: ")
-                    try:
-                        author_id = int(input("Enter author ID: "))
-                        add_book(title, author_id)
-                    except ValueError:
-                        print("Invalid input. Please enter a valid author ID (integer).")
+                    author_id = int(input("Enter author ID: "))
+                    add_book(title, author_id)
                 elif book_choice == "2":
                     view_books()
                 elif book_choice == "3":
-                    try:
-                        book_id = int(input("Enter book ID to update: "))
-                        new_title = input("Enter new title: ")
-                        new_author_id = int(input("Enter new author ID: "))
-                        update_book(book_id, new_title, new_author_id)
-                    except ValueError:
-                        print("Invalid input. Please enter valid data.")
+                    book_id = int(input("Enter book ID to update: "))
+                    new_title = input("Enter new title: ")
+                    new_author_id = int(input("Enter new author ID: "))
+                    update_book(book_id, new_title, new_author_id)
                 elif book_choice == "4":
-                    try:
-                        book_id = int(input("Enter book ID to delete: "))
-                        delete_book(book_id)
-                    except ValueError:
-                        print("Invalid input. Please enter a valid book ID (integer).")
+                    book_id = int(input("Enter book ID to delete: "))
+                    delete_book(book_id)
                 elif book_choice == "5":
                     break
                 else:
@@ -301,7 +392,6 @@ def main():
                 print("3. Update Author")
                 print("4. Delete Author")
                 print("5. Go Back")
-                
                 author_choice = input("Enter your choice: ")
                 
                 if author_choice == "1":
@@ -310,18 +400,12 @@ def main():
                 elif author_choice == "2":
                     view_authors()
                 elif author_choice == "3":
-                    try:
-                        author_id = int(input("Enter author ID to update: "))
-                        new_name = input("Enter new name: ")
-                        update_author(author_id, new_name)
-                    except ValueError:
-                        print("Invalid input. Please enter a valid author ID (integer).")
+                    author_id = int(input("Enter author ID to update: "))
+                    new_name = input("Enter new author name: ")
+                    update_author(author_id, new_name)
                 elif author_choice == "4":
-                    try:
-                        author_id = int(input("Enter author ID to delete: "))
-                        delete_author(author_id)
-                    except ValueError:
-                        print("Invalid input. Please enter a valid author ID (integer).")
+                    author_id = int(input("Enter author ID to delete: "))
+                    delete_author(author_id)
                 elif author_choice == "5":
                     break
                 else:
@@ -335,70 +419,41 @@ def main():
                 print("3. Update Borrower")
                 print("4. Delete Borrower")
                 print("5. Go Back")
-                
                 borrower_choice = input("Enter your choice: ")
                 
                 if borrower_choice == "1":
                     name = input("Enter borrower name: ")
                     email = input("Enter borrower email: ")
-                    phone = input("Enter borrower phone number: ")
+                    phone = input("Enter borrower phone: ")
                     add_borrower(name, email, phone)
                 elif borrower_choice == "2":
                     view_borrowers()
                 elif borrower_choice == "3":
-                    try:
-                        borrower_id = int(input("Enter borrower ID to update: "))
-                        new_name = input("Enter new name: ")
-                        new_email = input("Enter new email: ")
-                        new_phone = input("Enter new phone number: ")
-                        update_borrower(borrower_id, new_name, new_email, new_phone)
-                    except ValueError:
-                        print("Invalid input. Please enter a valid borrower ID (integer).")
+                    borrower_id = int(input("Enter borrower ID to update: "))
+                    new_name = input("Enter new name: ")
+                    new_email = input("Enter new email: ")
+                    new_phone = input("Enter new phone: ")
+                    update_borrower(borrower_id, new_name, new_email, new_phone)
                 elif borrower_choice == "4":
-                    try:
-                        borrower_id = int(input("Enter borrower ID to delete: "))
-                        delete_borrower(borrower_id)
-                    except ValueError:
-                        print("Invalid input. Please enter a valid borrower ID (integer).")
+                    borrower_id = int(input("Enter borrower ID to delete: "))
+                    delete_borrower(borrower_id)
                 elif borrower_choice == "5":
                     break
                 else:
                     print("Invalid choice. Please try again.")
-
+        
         elif choice == "4":
-            while True:
-                print("\n--- Manage Borrowed Books ---")
-                print("1. Borrow Book")
-                print("2. View Borrowed Books")
-                print("3. Go Back")
-                
-                borrowed_choice = input("Enter your choice: ")
-                
-                if borrowed_choice == "1":
-                    try:
-                        book_id = int(input("Enter book ID: "))
-                        borrower_id = int(input("Enter borrower ID: "))
-                        borrow_date = input("Enter borrow date (YYYY-MM-DD): ")
-                        return_date = input("Enter return date (YYYY-MM-DD): ")
-                        borrow_book(book_id, borrower_id, borrow_date, return_date)
-                    except ValueError:
-                        print("Invalid input. Please enter valid IDs and dates.")
-                elif borrowed_choice == "2":
-                    view_borrowed_books()
-                elif borrowed_choice == "3":
-                    break
-                else:
-                    print("Invalid choice. Please try again.")
+            manage_borrowed_books()
         
         elif choice == "5":
-            print("Exiting the system...")
+            print("Exiting Library Management System...")
             break
+        
         else:
             print("Invalid choice. Please try again.")
 
-if __name__ == "__main__":
-    # Create tables in the SQLite database if not already created
-    create_tables()
+# Initialize the database and create tables
+create_tables()
 
-    # Run the main menu for the library system
-    main()
+# Start the application
+main()

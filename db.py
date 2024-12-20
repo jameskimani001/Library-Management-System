@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Date, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.exc import IntegrityError
+from datetime import datetime
 
 # Define the Base class for SQLAlchemy models
 Base = declarative_base()
@@ -76,6 +77,15 @@ def get_session():
     Session = sessionmaker(bind=engine)
     return Session()
 
+# Helper function to validate date format
+def validate_date_format(date_string):
+    """Validates the date format (YYYY-MM-DD)."""
+    try:
+        # Attempt to parse the date in the expected format
+        return datetime.strptime(date_string, "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError("Invalid date format. Please enter the date in YYYY-MM-DD format.")
+
 # Function to add a book to the database
 def add_book(title, author_id):
     """Adds a book to the database."""
@@ -144,11 +154,24 @@ def view_borrowers():
 def borrow_book(book_id, borrower_id, borrow_date, return_date):
     """Adds a borrowed book record to the database."""
     session = get_session()
-    new_borrowed_book = BorrowedBook(book_id=book_id, borrower_id=borrower_id, borrow_date=borrow_date, return_date=return_date)
-    session.add(new_borrowed_book)
-    session.commit()
-    print("Book borrowed successfully.")
-    session.close()
+    try:
+        borrow_date = validate_date_format(borrow_date)
+        return_date = validate_date_format(return_date)
+
+        if return_date <= borrow_date:
+            print("Error: The return date must be after the borrow date.")
+            return
+        
+        new_borrowed_book = BorrowedBook(book_id=book_id, borrower_id=borrower_id, borrow_date=borrow_date, return_date=return_date)
+        session.add(new_borrowed_book)
+        session.commit()
+        print("Book borrowed successfully.")
+    except ValueError as e:
+        print(f"Error: {e}")
+    except IntegrityError:
+        print("Error: Invalid book or borrower ID.")
+    finally:
+        session.close()
 
 # Function to view borrowed books
 def view_borrowed_books():

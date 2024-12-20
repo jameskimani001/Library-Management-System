@@ -36,7 +36,6 @@ def borrow_book():
         
         if book is None:
             print(f"No book found with ID {book_id}. Please check the ID and try again.")
-            connection.close()
             return
 
         cursor.execute("SELECT id FROM borrowers WHERE id = ?", (borrower_id,))
@@ -44,7 +43,6 @@ def borrow_book():
 
         if borrower is None:
             print(f"No borrower found with ID {borrower_id}. Please check the ID and try again.")
-            connection.close()
             return
 
         # Check if the book is already borrowed
@@ -53,29 +51,32 @@ def borrow_book():
         
         if existing_borrow:
             print(f"The book with ID {book_id} is already borrowed and not yet returned.")
-            connection.close()
             return
 
-        borrow_date = input("Enter borrow date (YYYY-MM-DD): ")
+        # Set borrow date to today by default
+        borrow_date = datetime.today().date()
+
         return_date = input("Enter return date (YYYY-MM-DD): ")
 
         # Validate date format
         try:
-            borrow_date = validate_date_format(borrow_date)
             return_date = validate_date_format(return_date)
         except ValueError as e:
             print(e)
-            connection.close()
             return
         
         # Insert the borrowed book into the database
         cursor.execute("INSERT INTO borrowed_books (book_id, borrower_id, borrow_date, return_date) VALUES (?, ?, ?, ?)",
                        (book_id, borrower_id, borrow_date, return_date))
         connection.commit()
-        connection.close()
+
         print("Book borrowed successfully!")
     except ValueError:
         print("Invalid input. Please enter valid numeric IDs for book and borrower.")
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+    finally:
+        connection.close()
 
 def view_borrowed_books():
     connection = get_connection()
@@ -106,17 +107,20 @@ def return_book():
 
         if borrowed_book is None:
             print(f"No borrowed book found with ID {borrowed_book_id}. Please check the ID and try again.")
-            connection.close()
             return
 
         # Mark the book as returned by updating the return_date
         return_date = datetime.today().date()  # Set today's date as the return date
         cursor.execute("UPDATE borrowed_books SET return_date = ? WHERE id = ?", (return_date, borrowed_book_id))
         connection.commit()
-        connection.close()
+
         print("Book returned successfully!")
     except ValueError:
         print("Invalid input. Please enter a valid numeric borrowed book ID.")
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+    finally:
+        connection.close()
 
 # Helper function to validate date format
 def validate_date_format(date_string):
